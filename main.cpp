@@ -16,17 +16,20 @@
 
 
 
-int FIN_Pin_1 = 13;     //servo motor to control fin 1
-int FIN_PIN_2 = 12;     //servo motor to control fin 2
+int FIN_Pin_1 = 12;     //servo motor to control fin 1
+int FIN_PIN_2 = 13;     //servo motor to control fin 2
 int PROP_Pin =  14;     // PWM control of PROPELLER
 
-ESP32PWM servo_fin_1_F;  // servo PWM initialization for servo motor 1
-ESP32PWM servo_fin_2_F;  // servo PWM initialization for servo motor 1
+// ESP32PWM servo_fin_1_F;  // servo PWM initialization for servo motor 1
+// ESP32PWM servo_fin_2_F;  // servo PWM initialization for servo motor 1
+
+Servo servo_fin_1;
+Servo servo_fin_2;
 ESP32PWM motor_prop_F;   // PWM initialization for power control of propeller motor 
 
 
 int freq = 50;
-int freq_prop = 1000;
+int freq_prop = 50;
 
 
 //Declaring several function to control each part of the submarine independently from each other with their each loop
@@ -49,6 +52,7 @@ static QueueHandle_t servo_2_command_Q = NULL;
 static QueueHandle_t propeller_m_Q = NULL;
 static QueueHandle_t sensors_Q = NULL;
 
+
 void setup() {
   // put your setup code here, to run once:
  
@@ -58,9 +62,12 @@ void setup() {
 
 
 
-	servo_fin_1_F.attachPin(FIN_Pin_1, freq, 10); // 50 Hz 8 bit PWM initialization
-	servo_fin_2_F.attachPin(FIN_PIN_2, freq, 10); // 50 Hz 8 bit PWM initialization
+	// servo_fin_1_F.attachPin(FIN_Pin_1, freq, 10); // 50 Hz 8 bit PWM initialization
+	// servo_fin_2_F.attachPin(FIN_PIN_2, freq, 10); // 50 Hz 8 bit PWM initialization
+	servo_fin_1.attach(FIN_Pin_1,500,2400);
+	servo_fin_2.attach(FIN_PIN_2,500,2400);
 	motor_prop_F.attachPin(PROP_Pin, freq_prop, 10);// 1KHz 8 bit PWM declaration
+
 
 
 
@@ -85,38 +92,38 @@ void loop() {
 	delay(200);
 	//idle loop
 
-
+	
 }
 
 // Function to control the position of the servo motor angle by moving the PWM signal linearly from current value to target value
 void SERVO_FIN_1( void *pvParameters ){
-	int servo_angle;               //variable to receive and hold the value of user desired angle
-	float target_angle ;           // converting the input data in a scale of 0 to 1
-	float current_angle;           //current PWM value in a scale of 0 to 1
+	int servo_angle = 0;               //variable to receive and hold the value of user desired angle
+	// int target_angle ;           // converting the input data in a scale of 0 to 1
+	int current_angle;           //current PWM value in a scale of 0 to 1
   	while (1)
   	{
 		if (xQueueReceive(servo_1_command_Q,&servo_angle,10) == true){             //checking if any new data is available in the queue and read it
-			target_angle = (float)(servo_angle*1.00)/100.00 ;                      //scale it in a value of 0 to 1
-			if (current_angle < target_angle){                                      //checking if the new value is bigger or smaller and which direction to move  
+			// target_angle = (float)(servo_angle*1.00)/100.00 ;                      //scale it in a value of 0 to 1
+			if (current_angle < servo_angle){                                      //checking if the new value is bigger or smaller and which direction to move  
 				// linearly move the PWM value from current value to desired value
-				for (float s_angle = current_angle; s_angle <= target_angle; s_angle  = s_angle + .01) {
-		  			servo_fin_1_F.writeScaled(s_angle);
-					delay(20);
+				for (int s_angle = current_angle; s_angle <= servo_angle; s_angle  = s_angle + 1) {
+		  			servo_fin_1.write(s_angle);
+					delay(50);
 				}
 		  		
 	  		}
-			if (current_angle > target_angle){                                         //checking if the new value is bigger or smaller and which direction to move
+			if (current_angle > servo_angle){                                         //checking if the new value is bigger or smaller and which direction to move
 				// linearly move the PWM value from current value to desired value
-				for (float s_angle = current_angle; s_angle >= target_angle; s_angle  = s_angle - .01) {
-		  			servo_fin_1_F.writeScaled(s_angle);
-		  			delay(20);
+				for (int s_angle = current_angle; s_angle >= servo_angle; s_angle  = s_angle - 1) {
+		  			servo_fin_1.write(s_angle);
+		  			delay(50);
 				}
 	  		}
 			delay(20);
-			current_angle = target_angle;         //after the operation, set target value as current value
+			current_angle = servo_angle;         //after the operation, set target value as current value
 
 		}else{
-			servo_fin_1_F.writeScaled(current_angle); // if no new data receiver, then making sure that PWM signal is according to current angle
+			servo_fin_1.write(servo_angle); // if no new data receiver, then making sure that PWM signal is according to current angle
 			delay(20);
 		}
 		delay(20);
@@ -129,30 +136,30 @@ void SERVO_FIN_1( void *pvParameters ){
 // Function to control the position of the servo motor angle by moving the PWM signal linearly from current value to target value
 void SERVO_FIN_2( void *pvParameters ){
 	int servo_angle;              //variable to receive and hold the value of user desired angle
-	float target_angle ;          // variable which is used to convert the received data in a scale of 0 to 1
-	float current_angle;          //current PWM value in a scale of 0 to 1
+	// int target_angle ;          // variable which is used to convert the received data in a scale of 0 to 1
+	int current_angle;          //current PWM value in a scale of 0 to 1
   	while (1)
   	{
 		if (xQueueReceive(servo_2_command_Q,&servo_angle,10) == true){    //checking if any new data is available in the queue and read it
-			target_angle = (float)(servo_angle*1.00)/100.00 ;              //scale it in a value of 0 to 1
-			if (current_angle < target_angle){                            //checking if the new value is bigger or smaller and which direction to move  
+			// target_angle = (float)(servo_angle*1.00)/100.00 ;              //scale it in a value of 0 to 1
+			if (current_angle < servo_angle){                            //checking if the new value is bigger or smaller and which direction to move  
 				// linearly move the PWM value from current value to desired value
-				for (float s_angle = current_angle; s_angle <= target_angle; s_angle  = s_angle + .01) {
-		  			servo_fin_2_F.writeScaled(s_angle);
-					delay(20);
+				for (int s_angle = current_angle; s_angle <= servo_angle; s_angle  = s_angle + 1) {
+		  			servo_fin_2.write(s_angle);
+					delay(50);
 				}
 	  		}
-			if (current_angle > target_angle){                          //checking if the new value is bigger or smaller and which direction to move
+			if (current_angle > servo_angle){                          //checking if the new value is bigger or smaller and which direction to move
 				// linearly move the PWM value from current value to desired value
-				for (float s_angle = current_angle; s_angle >= target_angle; s_angle  = s_angle - .01) {
-		  			servo_fin_2_F.writeScaled(s_angle);
-		  			delay(20);
+				for (int s_angle = current_angle; s_angle >= servo_angle; s_angle  = s_angle - 1) {
+		  			servo_fin_2.write(s_angle);
+		  			delay(50);
 				}
 	  		}
 			delay(20);
-			current_angle = target_angle;                  //after the operation, set target value as current value
+			current_angle = servo_angle;                  //after the operation, set target value as current value
 		}else{
-			servo_fin_2_F.writeScaled(current_angle);       // if no new data receiver, then making sure that PWM signal is according to current angle
+			servo_fin_2.write(current_angle);       // if no new data receiver, then making sure that PWM signal is according to current angle
 			delay(20);
 		}
 		delay(20);
@@ -226,7 +233,8 @@ void USER_SERIAL_INPUT (void *pvParameters){
 	 //if input starts with v then, it means velocity command with percentages , if it is d then direction command for servo fins
 	 // as example v 34  for velocity 34 percent, d 23 as fin angle of 23 degree.
 	String velocity = "v"; 
-	String Direction = "d";
+	String Direction_fin_1 = "x";
+	String Direction_fin_2 = "y";
 
 	while (1){
 
@@ -237,7 +245,7 @@ void USER_SERIAL_INPUT (void *pvParameters){
 					Serial.println(incoming_data);                         //serial monitor update about the input data
 					String characters = "";                                 // value declaration for command type, velocity or direction
    					String numbers = "";                                    // command value  declaration
-					//iteration over the user input is stroing it in string and number
+					//iteration over the user input is storing it in string and number
 					for (int i = 0; i < incoming_data.length(); i++) {   
       					char c = incoming_data.charAt(i);
 						if (isAlpha(c)) {
@@ -248,19 +256,28 @@ void USER_SERIAL_INPUT (void *pvParameters){
 					}
 					Serial.print("command initial : ");
 					Serial.println(characters);
-					if (characters == Direction){
+					if (characters == Direction_fin_1){
 						Serial.println("Direction adjustment command");
 						int direction_data =  numbers.toInt();
 						if(numbers != NULL){
-							Serial.println("sending command to servo fin 1 and 2");
+							Serial.println("sending command to servo fin 1 ");
 							if(xQueueSend(servo_1_command_Q,&direction_data,10) == true){
 								Serial.println("direction has been sent to FIN 1"); //sending command to servo motor fin 1 handling function
 							}
+
+						}
+					}
+					if (characters == Direction_fin_2){
+						Serial.println("Direction adjustment command");
+						int direction_data =  numbers.toInt();
+						if(numbers != NULL){
+							Serial.println("sending command to servo fin 2");
 							if(xQueueSend(servo_2_command_Q,&direction_data,10) == true){
 								Serial.println("direction has been sent to FIN 2"); //sending command to servo motor fin 2 handling function
 							}
 						}
 					}
+
 
 					if(characters == velocity){
 						Serial.println("velocity command");
