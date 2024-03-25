@@ -8,6 +8,10 @@
 #include "stdlib.h"
 #include "string.h"
 #include "ESP32Servo.h"
+#include "BluetoothSerial.h"
+
+
+
 
 
 
@@ -15,16 +19,15 @@
 #define USER_INPUT 36  // pin to read user analog input
 
 
+BluetoothSerial SerialBT;
 
 int FIN_Pin_1 = 12;     //servo motor to control fin 1
 int FIN_PIN_2 = 13;     //servo motor to control fin 2
 int PROP_Pin =  14;     // PWM control of PROPELLER
 
-// ESP32PWM servo_fin_1_F;  // servo PWM initialization for servo motor 1
-// ESP32PWM servo_fin_2_F;  // servo PWM initialization for servo motor 1
 
-Servo servo_fin_1;
-Servo servo_fin_2;
+Servo servo_fin_1;         // servo PWM initialization for servo motor 1
+Servo servo_fin_2;        // servo PWM initialization for servo motor 1
 ESP32PWM motor_prop_F;   // PWM initialization for power control of propeller motor 
 
 
@@ -39,10 +42,14 @@ void SERVO_FIN_1( void *pvParameters );   // Function to control servo fin
 void SERVO_FIN_2( void *pvParameters );   // Function to control servo fin
 void PROPELLER_M( void *pvParameters );   // Function to control propeller speed
 
+void BT_HANDLER( void *pvParameters );    //bluetooth function initiation
+void USER_SERIAL_INPUT(void *pvParameters);       //example user serial input
+
 void VELOCITY_MEASUREMENT( void *pvParameters );  // function to measure the velocity of the submarine
 
 void USER_INPUT_1( void *pvParameters);           //example user input
-void USER_SERIAL_INPUT(void *pvParameters);       //example user serial input
+
+
 
 
 
@@ -58,12 +65,11 @@ void setup() {
  
 	Serial.begin(115200);
 	analogReadResolution(12);                     //// Set ADC resolution to 12 bits (0-4095)
+	SerialBT.begin("ESP32");
 
 
 
 
-	// servo_fin_1_F.attachPin(FIN_Pin_1, freq, 10); // 50 Hz 8 bit PWM initialization
-	// servo_fin_2_F.attachPin(FIN_PIN_2, freq, 10); // 50 Hz 8 bit PWM initialization
 	servo_fin_1.attach(FIN_Pin_1,500,2400);
 	servo_fin_2.attach(FIN_PIN_2,500,2400);
 	motor_prop_F.attachPin(PROP_Pin, freq_prop, 10);// 1KHz 8 bit PWM declaration
@@ -78,20 +84,24 @@ void setup() {
 	sensors_Q = xQueueCreate(5,sizeof(int));         // starting queue for sensors
 	
 	//initializing all the functions to run independently from each other using real time operating system API
+	xTaskCreate(BT_HANDLER,"BT operation", 2024 , NULL , 2  , NULL);
 	xTaskCreate(SERVO_FIN_1,"servo to control fin 1", 2024 , NULL, 2  , NULL );
 	xTaskCreate(SERVO_FIN_2,"servo to control fin 2", 2024 , NULL, 2  , NULL );
-	xTaskCreate(USER_SERIAL_INPUT,"accepts user input", 2024 , NULL , 2  , NULL);
+	//xTaskCreate(USER_SERIAL_INPUT,"accepts user input", 2024 , NULL , 2  , NULL);
 	xTaskCreate(PROPELLER_M,"propeller power", 2024 , NULL , 2  , NULL);
+	
 
 	//disabling the following function unless actual sensors and potentiometer is attached
 	// xTaskCreate(USER_INPUT_1,"user input function", 2024 , NULL , 2  , NULL);
 	// xTaskCreate(VELOCITY_MEASUREMENT,"velocity measurement function", 2024 , NULL , 2  , NULL);
 }
 
-void loop() {
-	delay(200);
-	//idle loop
 
+
+void loop() {
+	//idle loop
+	delay(20);
+	
 	
 }
 
@@ -227,6 +237,80 @@ void VELOCITY_MEASUREMENT(void *pvParameters){
 }
 
 
+void BT_HANDLER( void *pvParameters ){
+	String velocity = "v"; 
+	String Direction_fin_1 = "x";
+	String Direction_fin_2 = "y";
+
+	while (1)
+	{
+		if (SerialBT.available()) {
+        	String incoming_data = SerialBT.readString();   //read user input from serial terminal
+			if(incoming_data.length() > 0){	
+				if(incoming_data[incoming_data.length()- 1] == '\n'){   //when returned is pressed 
+					SerialBT.println(incoming_data);                         //serial monitor update about the input data
+					String characters = "";                                 // value declaration for command type, velocity or direction
+   					String numbers = "";                                    // command value  declaration
+					//iteration over the user input is storing it in string and number
+					for (int i = 0; i < incoming_data.length(); i++) {   
+      					char c = incoming_data.charAt(i);
+						if (isAlpha(c)) {
+							characters += c;
+						} else if (isDigit(c)) {
+							numbers += c;
+						}
+					}
+					SerialBT.print("command initial : ");
+					SerialBT.println(characters);
+					if (characters == Direction_fin_1){
+						SerialBT.println("Direction adjustment command");
+						int direction_data =  numbers.toInt();
+						if(numbers != NULL){
+							SerialBT.println("sending command to servo fin 1 ");
+							if(xQueueSend(servo_1_command_Q,&direction_data,10) == true){
+								SerialBT.println("direction has been sent to FIN 1"); //sending command to servo motor fin 1 handling function
+							}
+
+						}
+					}
+					if (characters == Direction_fin_2){
+						SerialBT.println("Direction adjustment command");
+						int direction_data =  numbers.toInt();
+						if(numbers != NULL){
+							SerialBT.println("sending command to servo fin 2");
+							if(xQueueSend(servo_2_command_Q,&direction_data,10) == true){
+								SerialBT.println("direction has been sent to FIN 2"); //sending command to servo motor fin 2 handling function
+							}
+						}
+					}
+
+
+					if(characters == velocity){
+						SerialBT.println("velocity command");
+						int velocity_data = numbers.toInt();
+						if(numbers != NULL){
+							SerialBT.println("sending command to DC motor");
+							if(xQueueSend(propeller_m_Q,&velocity_data,10) == true){
+								SerialBT.println("velocity has been sent motor control");  //sending command to propeller motor power handling function
+							}
+						}
+					}
+
+				}
+			}
+    	}
+    
+    	delay(20);
+	}
+	
+}
+
+
+
+
+
+
+
 
 //Function to take user input from serial terminal and relay it to the appropiate functions handling appropiate operation
 void USER_SERIAL_INPUT (void *pvParameters){
@@ -297,6 +381,11 @@ void USER_SERIAL_INPUT (void *pvParameters){
 		
   	}
 }
+
+
+
+
+
 
 
 
